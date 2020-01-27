@@ -49,53 +49,133 @@
 
 ;; UI
 
-(defn button [{:keys [on-click]} text]
-  [:button.btn {:on-click on-click}
+(defn button [{:keys [on-click disabled]} text]
+  [:button {:on-click on-click
+            :disabled disabled
+            :style {:font-size "18px"
+                    :padding "8px"
+                    :margin "8px"
+                    :background-color "transparent"
+                    :border "1px solid black"}}
    text])
 
-(defn name-input [{:keys [on-new-name]}]
+(defn name-input [{:keys [on-new-name placeholder]}]
   (let [ref (uix/ref)]
     [:input {:on-key-down (fn [e]
                             (when (= 13 (o/get e "keyCode"))
                               (on-new-name (o/get @ref "value"))
                               (o/set @ref "value" nil)))
+             :placeholder placeholder
+             :style {:flex "1 0 auto"
+                     :position :sticky
+                     :top "60px"
+                     :font-size "18px"
+                     :margin-top "8px"
+                     :padding "8px"
+                     :border-top "1px solid black"
+                     :border-bottom "1px solid black"
+                     :height "32px"}
              :ref ref}]))
 
-(defn list-view [{:keys [data render-item key-fn]}]
-  [:ul
+(defn list-view
+  "Flex based list view"
+  [{:keys [data render-item key-fn on-item-click]}]
+  [:ul {:style {:list-style "none"
+                :display :flex
+                :flex-direction :row
+                :flex-wrap :wrap
+                :width "100%"
+                :padding-left "0"}}
    (for [item data]
      ^{:key (key-fn item)}
-     [render-item item])])
+     [render-item  (assoc item :on-item-click on-item-click)])])
 
-(defn item-renderer [item]
-  [:li (:name item)])
+(defn item-renderer [{:keys [on-item-click] :as item}]
+  [:li
+   {:style {:list-style "none"
+            :list-style-type "none"
+            :border "1px solid black"
+            :border-radius "5px"
+            :padding "4px 8px"
+            :margin "4px"
+            :display :flex
+            :align-items :center
+            :justify-content :center}}
+   [:div {:style {:margin-right "8px"}} (:name item)]
+   [:div {:on-click #(on-item-click item)
+          :style {:font-size "21px"}} " \u2297"]])
 
-(defn setup-scene [{:keys [on-setup-finish]}]
-  (let [state* (uix/state [])]
-    [:<>
-     [:div
-      [:span (str "Players: " (count @state*))]
-      [button {:on-click #(on-setup-finish @state*)} "Start"]]
-     [name-input {:on-new-name (fn on-new-name [n]
+(defn setup-scene [{:keys [on-setup-finish init-state]}]
+  (let [state* (uix/state (:players init-state []))
+        on-finish (uix/callback #(on-setup-finish @state*) [state*])
+        enough-player? (> (count @state*) 3)]
+    [:div {:style {:display :flex
+                   :flex-direction :column}}
+     [:section {:style {:position :sticky
+                        :background-color :white
+                        :top 0}}
+      [:div {:style {:display :flex
+                     :flex-direction :row
+                     :align-items :center}}
+       (let [{:keys [spy common]} (init-settings @state*)]
+         [:div {:style {:flex "1 0 auto"}}
+          (if enough-player?
+            (str "玩家: " (count @state*)  ", 間諜：" spy ", 平民：" common)
+            "最少要有四人才可以開始遊戲")])
+       [button {:on-click on-finish
+                :disabled (not enough-player?)} "開始"]]]
+     [name-input {:placeholder "輸入玩家名稱"
+                  :on-new-name (fn on-new-name [n]
                                  (swap! state*
                                         (fn append-new-name [names]
-                                          (conj names {:id (count names)
+                                          (conj names {:id (js/Date.)
                                                        :name n}))))}]
      [list-view {:data @state*
                  :render-item item-renderer
+                 :on-item-click (fn [item]
+                                  (swap! state*
+                                         (fn [players]
+                                            (remove #(= (:id %) (:id item))  players))))
                  :key-fn :id}]]))
 
+(defn player-code-card [{:keys [on-item-click] :as player} words]
+  (let [clicked (uix/state false)]
+   [:li {:style (cond->
+                    {:border "1px solid black"
+                     :width "45%"
+                     :margin " calc( 2.5% - 1px)"
+                     :display :flex
+                     :flex-direction :column
+                     :align-items :center
+                     :justify-content :center}
+                    @clicked
+                    (assoc :background-color :grey))}
+    [:h4
+     {:style {:max-width "150px"
+              :text-overflow :ellipsis
+              :overflow-x :hidden}}
+     (:name player)]
+    (if @clicked
+      [button {} "已確認"]
+      [button {:on-click (fn [e]
+                           (js/alert (get words (:character player)))
+                           (reset! clicked true))}
+       "確認暗號"])]))
+
 (defn confirm-scene [{:keys [game on-confirm]}]
-  (let [idx (uix/state 0)
-        {:keys [words players]} game
-        cur-player (get-in players [@idx])]
-    [:<>
-     [:h3 "Please pass your phone according to the name"]
-     [:h2 (:name cur-player)]
-     [:h3 (get words (:characters cur-player))]
-     (if cur-player
-       [:button {:on-click #(swap! idx inc)} "Next Player"]
-       [:button {:on-click on-confirm} "Start"])]))
+  (let [{:keys [words players]} game]
+    [:div
+     {:style {:display :flex
+              :flex-direction :column
+              :align-items :center}}
+     [:h3 "確認暗號"]
+     [:p "當所有人都確認過自己的勢力暗號就可以開始"]
+     [list-view {:data players
+                 :key-fn :id
+                 :render-item (fn [item]
+                                [player-code-card item words])}]
+     (if true
+       [button {:on-click on-confirm} "開始"])]))
 
 (defn vote-for-spy [game-state player]
   (update game-state
