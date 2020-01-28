@@ -116,6 +116,20 @@
    [:div {:on-click #(on-item-click item)
           :style {:font-size "21px"}} " \u2297"]])
 
+(defn sticky-header [{:keys [right middle left]}]
+  [:section {:style {:position :sticky
+                        :background-color :white
+                        :top 0}}
+      [:div {:style {:display :flex
+                     :flex-direction :row
+                     :align-items :center}}
+       (when left
+         left)
+       (when middle
+         middle)
+       (when right
+         right)]])
+
 (defn setup-scene [{:keys [on-setup-finish init-state]}]
   (let [state* (uix/state (:players init-state []))
         words (uix/state nil)
@@ -124,19 +138,13 @@
         enough-player? (> (count @state*) 3)]
     [:div {:style {:display :flex
                    :flex-direction :column}}
-     [:section {:style {:position :sticky
-                        :background-color :white
-                        :top 0}}
-      [:div {:style {:display :flex
-                     :flex-direction :row
-                     :align-items :center}}
-       (let [{:keys [spy common]} (init-settings @state*)]
-         [:div {:style {:flex "1 0 auto"}}
-          (if enough-player?
-            (str "玩家: " (count @state*)  ", 間諜：" spy ", 平民：" common)
-            "最少要有四人才可以開始遊戲")])
-       [button {:on-click on-finish
-                :disabled (not enough-player?)} "開始"]]]
+     [sticky-header {:middle  (let [{:keys [spy common]} (init-settings @state*)]
+                                [:div {:style {:flex "1 0 auto"}}
+                                  (if enough-player?
+                                    (str "玩家: " (count @state*)  ", 間諜：" spy ", 平民：" common)
+                                    "最少要有四人才可以開始遊戲")])
+                     :right [button {:on-click on-finish
+                                     :disabled (not enough-player?)} "開始"]}]
      [:section {:style {:display :flex
                         :flex-direction :row
                         :align-items :center}}
@@ -184,16 +192,15 @@
   (let [{:keys [words players]} game]
     [:div
      {:style {:display :flex
-              :flex-direction :column
-              :align-items :center}}
-     [:h3 "確認暗號"]
+              :flex-direction :column}}
+     [sticky-header {:middle [:div {:style {:flex "1 0 auto"}}
+                              "確認暗號"]
+                     :right [button {:on-click on-confirm} "開始"]}]
      [:p "當所有人都確認過自己的勢力暗號就可以開始"]
      [list-view {:data players
                  :key-fn :id
                  :render-item (fn [item]
-                                [player-code-card item words])}]
-     (if true
-       [button {:on-click on-confirm} "開始"])]))
+                                [player-code-card item words])}]]))
 
 (defn vote-for-spy [game-state player]
   (update game-state
@@ -235,9 +242,9 @@
 (defn gaming-scene [{:keys [init-state on-game-over]}]
   (let [gaming-state (uix/state init-state)]
     [:div {:style {:display :flex
-                   :flex-direction :column
-                   :align-items :center}}
-     [:h3 "投票"]
+                   :flex-direction :column}}
+     [sticky-header {:middle [:div {:style {:flex "1 0 auto"}} "投票"]
+                     :right  [button {:on-click on-game-over} "結束"]}]
      [:p "每回合，所有人輪流發言證明自己不是臥底，然後投票處決一人。若所有臥底被處死，平民勝利。若臥底生存到最後一回合，則臥底勝。"]
      (when (game-over? @gaming-state)
        [:h4
@@ -254,8 +261,7 @@
                    [player-vote-card {:on-item-click
                                       #(swap! gaming-state vote-for-spy item)
                                       :player item}])
-                 :key-fn :id}]
-     [button {:on-click on-game-over} "結束"]]))
+                 :key-fn :id}]]))
 
 (defn app []
   (let [scene (uix/state :setup)
