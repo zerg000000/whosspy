@@ -5,9 +5,15 @@
 
 ;; Logic
 
-(def db [{:spy "咖啡"
-          :common "奶茶"
-          :moron nil}])
+(def db [["咖啡" "奶茶"]
+         ["鬍子" "眉毛"]
+         ["小說" "漫畫"]])
+
+(defn draw-words [db]
+  (->> db
+       (rand-nth)
+       (shuffle)
+       (zipmap [:spy :common])))
 
 (defn mark-characters [players {:keys [spy common moron]}]
   (let [characters (-> (concat (repeat spy :spy)
@@ -18,8 +24,13 @@
            (assoc p :character c))
          players characters)))
 
-(defn init-game [players settings]
-  (let [words (rand-nth db)]
+(defn init-settings [players]
+  (let [spy (js/Math.round (* (count players) 0.2))]
+    {:spy spy :common (- (count players) spy)}))
+
+(defn init-game [players]
+  (let [words (draw-words db)
+        settings (init-settings players)]
     {:players (mark-characters players settings)
      :words words
      :settings settings}))
@@ -90,7 +101,7 @@
      ^{:key (key-fn item)}
      [render-item  (assoc item :on-item-click on-item-click)])])
 
-(defn item-renderer [{:keys [on-item-click] :as item}]
+(defn name-label [{:keys [on-item-click] :as item}]
   [:li
    {:style {:list-style "none"
             :list-style-type "none"
@@ -107,6 +118,8 @@
 
 (defn setup-scene [{:keys [on-setup-finish init-state]}]
   (let [state* (uix/state (:players init-state []))
+        words (uix/state nil)
+        custom-words-cb #()
         on-finish (uix/callback #(on-setup-finish @state*) [state*])
         enough-player? (> (count @state*) 3)]
     [:div {:style {:display :flex
@@ -124,6 +137,11 @@
             "最少要有四人才可以開始遊戲")])
        [button {:on-click on-finish
                 :disabled (not enough-player?)} "開始"]]]
+     [:section {:style {:display :flex
+                        :flex-direction :row
+                        :align-items :center}}
+      [:div {:style {:flex "1 0 auto"}} "暗號"]
+      [button {:on-click custom-words-cb} "隨機"]]
      [name-input {:placeholder "輸入玩家名稱"
                   :on-new-name (fn on-new-name [n]
                                  (swap! state*
@@ -131,7 +149,7 @@
                                           (conj names {:id (js/Date.)
                                                        :name n}))))}]
      [list-view {:data @state*
-                 :render-item item-renderer
+                 :render-item name-label
                  :on-item-click (fn [item]
                                   (swap! state*
                                          (fn [players]
@@ -187,43 +205,75 @@
                      p))
                  players))))
 
+(defn player-vote-card [{:keys [on-item-click player]}]
+  (let [clicked (uix/state false)]
+   [:li {:style (cond->
+                    {:border "1px solid black"
+                     :width "45%"
+                     :margin " calc( 2.5% - 1px)"
+                     :display :flex
+                     :flex-direction :column
+                     :align-items :center
+                     :justify-content :center}
+                    (:voted player)
+                    (assoc :background-color :grey))}
+    [:h4
+     {:style {:max-width "150px"
+              :text-overflow :ellipsis
+              :overflow-x :hidden}}
+     (:name player)]
+    (if (:voted player)
+      [button {} (case (:character player)
+                   :spy "臥底"
+                   :common "平民"
+                   :moron "白板")]
+      [button {:on-click (fn [e]
+                           (reset! clicked true)
+                           (on-item-click player))}
+       "處決"])]))
+
 (defn gaming-scene [{:keys [init-state on-game-over]}]
   (let [gaming-state (uix/state init-state)]
-   [:<>
-    [list-view {:data (:players @gaming-state)
-                :render-item (fn [item]
-                               (if (:voted item)
-                                 [:li (str (:name item) "(" (name (:character item)) ")")]
-                                 [:li {:on-click #(swap! gaming-state vote-for-spy item)}
-                                  (:name item)]))
-                :key-fn :id}]
-    (when (game-over? @gaming-state)
-      (cond
-        (moron-win? @gaming-state)
-        "Moron Win!"
-        (spy-win? @gaming-state)
-        "Spy Win!"
-        (common-win? @gaming-state)
-        "Common Win!"))
-    [:button {:on-click #(on-game-over)} "結束"]]))
+    [:div {:style {:display :flex
+                   :flex-direction :column
+                   :align-items :center}}
+     [:h3 "投票"]
+     [:p "每回合，所有人輪流發言證明自己不是臥底，然後投票處決一人。若所有臥底被處死，平民勝利。若臥底生存到最後一回合，則臥底勝。"]
+     (when (game-over? @gaming-state)
+       [:h4
+        (cond
+          (moron-win? @gaming-state)
+          "白板勝利!"
+          (spy-win? @gaming-state)
+          "臥底勝利!"
+          (common-win? @gaming-state)
+          "平民勝利!")])
+     [list-view {:data (:players @gaming-state)
+                 :render-item
+                 (fn [item]
+                   [player-vote-card {:on-item-click
+                                      #(swap! gaming-state vote-for-spy item)
+                                      :player item}])
+                 :key-fn :id}]
+     [button {:on-click on-game-over} "結束"]]))
 
 (defn app []
   (let [scene (uix/state :setup)
         game (uix/state {})
         finish-setup-cb (fn [g]
-                          (reset! game (init-game g {:spy 1 :common 3}))
+                          (reset! game (init-game g))
                           (reset! scene :confirm))
-        confirm-character-cb (fn [] (reset! scene :gaming))]
+        confirm-character-cb (fn [] (reset! scene :gaming))
+        return-setup-cb (uix/callback (fn [& _] (reset! scene nil)) [scene])]
     (case @scene
       :confirm
       [confirm-scene {:game @game
                       :on-confirm confirm-character-cb}]
       :gaming
       [gaming-scene {:init-state @game
-                     :on-game-over (fn [& _] (reset! scene nil))}]
-      :gameover
-      [:div "Game Over"]
-      [setup-scene {:on-setup-finish finish-setup-cb}])))
+                     :on-game-over return-setup-cb}]
+      [setup-scene {:init-state @game
+                    :on-setup-finish finish-setup-cb}])))
 
 (defn ^:dev/after-load init []
   (dom/render [app] js/root))
