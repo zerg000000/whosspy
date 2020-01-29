@@ -1,62 +1,25 @@
 (ns whos-spy.app
   (:require [uix.core.alpha :as uix]
             [uix.dom.alpha :as dom]
-            [goog.object :as o]))
+            [goog.object :as o]
+            [whos-spy.logic :as logic]))
 
-;; Logic
+(defn mark-for [game-state player marker]
+  (update game-state
+          :players
+          (fn [players]
+            (map (fn [p]
+                   (if (= (:id p) (:id player))
+                     (assoc p marker true)
+                     p))
+                 players))))
 
-(def db [["咖啡" "奶茶"]
-         ["鬍子" "眉毛"]
-         ["小說" "漫畫"]])
-
-(defn draw-words [db]
-  (->> db
-       (rand-nth)
-       (shuffle)
-       (zipmap [:spy :common])))
-
-(defn mark-characters [players {:keys [spy common moron]}]
-  (let [characters (-> (concat (repeat spy :spy)
-                               (repeat common :common)
-                               (repeat moron :moron))
-                       (shuffle))]
-    (mapv (fn [p c]
-           (assoc p :character c))
-         players characters)))
-
-(defn init-settings [players]
-  (let [spy (js/Math.round (* (count players) 0.2))]
-    {:spy spy :common (- (count players) spy)}))
-
-(defn init-game [players]
-  (let [words (draw-words db)
-        settings (init-settings players)]
-    {:players (mark-characters players settings)
-     :words words
-     :settings settings}))
-
-(defn count-character [players & character-types]
-  (let [character-fn #(and ((set character-types) (:character %))
-                           (not (:voted %)))]
-   (-> (filter character-fn players)
-       (count))))
-
-(defn spy-win? [{:keys [players]}]
-  (and (> (count-character players :spy) 0)
-       (<= (count-character players :common :moron) 1)))
-
-(defn common-win? [{:keys [players]}]
-  (and (<= (count-character players :spy) 0)))
-
-(defn moron-win? [{:keys [players]}]
-  (and (or (= (count-character players :spy) 0)
-           (= (count-character players :common) 0))
-       (> (count-character players :moron) 0)))
-
-(defn game-over? [game]
-  (or (spy-win? game)
-      (common-win? game)
-      (moron-win? game)))
+(defn t [msg]
+   (case msg
+     :spy "臥底"
+     :common "平民"
+     :moron "白板"
+     :gaming-desc "每回合，所有人輪流發言證明自己不是臥底，然後投票處決一人。若所有臥底被處死，平民勝利。若臥底生存到最後一回合，則臥底勝。"))
 
 ;; UI
 
@@ -131,18 +94,18 @@
          right)]])
 
 (defn setup-scene [{:keys [on-setup-finish init-state]}]
-  (let [state* (uix/state (:players init-state []))
+  (let [players (uix/state (:players init-state []))
         words (uix/state nil)
         custom-words-cb #()
-        on-finish (uix/callback #(on-setup-finish @state*) [state*])
-        enough-player? (> (count @state*) 3)]
+        on-finish (uix/callback #(on-setup-finish @players) [players])
+        enough-player? (> (count @players) 3)]
     [:div {:style {:display :flex
                    :flex-direction :column}}
-     [sticky-header {:middle  (let [{:keys [spy common]} (init-settings @state*)]
+     [sticky-header {:middle  (let [{:keys [spy common]} (logic/init-settings @players)]
                                 [:div {:style {:flex "1 0 auto"}}
                                   (if enough-player?
-                                    (str "玩家: " (count @state*)  ", 間諜：" spy ", 平民：" common)
-                                    "最少要有四人才可以開始遊戲")])
+                                    (str "玩家: " (count @players)  ", 間諜：" spy ", 平民：" common)
+                                    (str "還差" (- 4 (count @players))  "人才可以開始遊戲"))])
                      :right [button {:on-click on-finish
                                      :disabled (not enough-player?)} "開始"]}]
      [:section {:style {:display :flex
@@ -152,65 +115,60 @@
       [button {:on-click custom-words-cb} "隨機"]]
      [name-input {:placeholder "輸入玩家名稱"
                   :on-new-name (fn on-new-name [n]
-                                 (swap! state*
+                                 (swap! players
                                         (fn append-new-name [names]
-                                          (conj names {:id (js/Date.)
+                                          (conj names {:id (.getTime (js/Date.))
                                                        :name n}))))}]
-     [list-view {:data @state*
+     [list-view {:data @players
                  :render-item name-label
                  :on-item-click (fn [item]
-                                  (swap! state*
+                                  (swap! players
                                          (fn [players]
                                             (remove #(= (:id %) (:id item))  players))))
                  :key-fn :id}]]))
 
-(defn player-code-card [{:keys [on-item-click] :as player} words]
-  (let [clicked (uix/state false)]
-   [:li {:style (cond->
-                    {:border "1px solid black"
-                     :width "45%"
-                     :margin " calc( 2.5% - 1px)"
-                     :display :flex
-                     :flex-direction :column
-                     :align-items :center
-                     :justify-content :center}
-                    @clicked
-                    (assoc :background-color :grey))}
-    [:h4
-     {:style {:max-width "150px"
-              :text-overflow :ellipsis
-              :overflow-x :hidden}}
-     (:name player)]
-    (if @clicked
-      [button {} "已確認"]
-      [button {:on-click (fn [e]
-                           (js/alert (get words (:character player)))
-                           (reset! clicked true))}
-       "確認暗號"])]))
+(defn player-code-card [{:keys [on-item-click]} player words]
+  [:li {:style (cond->
+                   {:border "1px solid black"
+                    :width "45%"
+                    :margin " calc( 2.5% - 1px)"
+                    :display :flex
+                    :flex-direction :column
+                    :align-items :center
+                    :justify-content :center}
+                 (:confirmed player)
+                 (assoc :background-color :grey))}
+   [:h4
+    {:style {:max-width "150px"
+             :text-overflow :ellipsis
+             :overflow-x :hidden}}
+    (:name player)]
+   (if (:confirmed player)
+     [button {} "已確認"]
+     [button {:on-click on-item-click}
+      "確認暗號"])])
 
 (defn confirm-scene [{:keys [game on-confirm]}]
-  (let [{:keys [words players]} game]
+  (let [game-state (uix/state game)
+        {:keys [players words]} @game-state]
     [:div
      {:style {:display :flex
               :flex-direction :column}}
      [sticky-header {:middle [:div {:style {:flex "1 0 auto"}}
                               "確認暗號"]
-                     :right [button {:on-click on-confirm} "開始"]}]
+                     :right [button {:on-click on-confirm
+                                     :disabled (not (every? :confirmed players))}
+                             "開始"]}]
      [:p "當所有人都確認過自己的勢力暗號就可以開始"]
      [list-view {:data players
                  :key-fn :id
-                 :render-item (fn [item]
-                                [player-code-card item words])}]]))
-
-(defn vote-for-spy [game-state player]
-  (update game-state
-          :players
-          (fn [players]
-            (map (fn [p]
-                   (if (= (:id p) (:id player))
-                     (assoc p :voted true)
-                     p))
-                 players))))
+                 :render-item (fn [player]
+                                [player-code-card
+                                 {:on-item-click
+                                  #(do
+                                     (js/alert (get words (:character player)))
+                                     (swap! game-state mark-for player :confirmed))}
+                                 player words])}]]))
 
 (defn player-vote-card [{:keys [on-item-click player]}]
   (let [clicked (uix/state false)]
@@ -230,36 +188,38 @@
               :overflow-x :hidden}}
      (:name player)]
     (if (:voted player)
-      [button {} (case (:character player)
-                   :spy "臥底"
-                   :common "平民"
-                   :moron "白板")]
+      [button {} (t (:character player))]
       [button {:on-click (fn [e]
                            (reset! clicked true)
                            (on-item-click player))}
        "處決"])]))
 
 (defn gaming-scene [{:keys [init-state on-game-over]}]
-  (let [gaming-state (uix/state init-state)]
+  (let [gaming-state (uix/state init-state)
+        dead (uix/state [])]
     [:div {:style {:display :flex
                    :flex-direction :column}}
-     [sticky-header {:middle [:div {:style {:flex "1 0 auto"}} "投票"]
+     [sticky-header {:middle [:div {:style {:flex "1 0 auto"}}
+                              (cond
+                                (= (count @dead) 0)
+                                "投票"
+                                (logic/moron-win? @gaming-state)
+                                "白板勝利!"
+                                (logic/spy-win? @gaming-state)
+                                "臥底勝利!"
+                                (logic/common-win? @gaming-state)
+                                "平民勝利!"
+                                :else
+                                (let [turn (count @dead)]
+                                   (str "第" turn "回合，" (-> @dead last :character t) "被處決")))]
                      :right  [button {:on-click on-game-over} "結束"]}]
-     [:p "每回合，所有人輪流發言證明自己不是臥底，然後投票處決一人。若所有臥底被處死，平民勝利。若臥底生存到最後一回合，則臥底勝。"]
-     (when (game-over? @gaming-state)
-       [:h4
-        (cond
-          (moron-win? @gaming-state)
-          "白板勝利!"
-          (spy-win? @gaming-state)
-          "臥底勝利!"
-          (common-win? @gaming-state)
-          "平民勝利!")])
+     [:p (t :gaming-desc)]
      [list-view {:data (:players @gaming-state)
                  :render-item
                  (fn [item]
                    [player-vote-card {:on-item-click
-                                      #(swap! gaming-state vote-for-spy item)
+                                      #(do (swap! gaming-state mark-for item :voted)
+                                           (swap! dead conj item))
                                       :player item}])
                  :key-fn :id}]]))
 
@@ -267,7 +227,7 @@
   (let [scene (uix/state :setup)
         game (uix/state {})
         finish-setup-cb (fn [g]
-                          (reset! game (init-game g))
+                          (reset! game (logic/init-game g))
                           (reset! scene :confirm))
         confirm-character-cb (fn [] (reset! scene :gaming))
         return-setup-cb (uix/callback (fn [& _] (reset! scene nil)) [scene])]
