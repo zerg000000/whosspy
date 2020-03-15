@@ -35,57 +35,46 @@
 
 (defn name-input [{:keys [on-new-name placeholder]}]
   (let [ref (uix/ref)]
-    [:input {:on-key-down (fn [e]
-                            (when (= 13 (o/get e "keyCode"))
-                              (on-new-name (o/get @ref "value"))
-                              (o/set @ref "value" nil)))
-             :placeholder placeholder
-             :style {:flex "1 0 auto"
-                     :position :sticky
-                     :top "60px"
-                     :font-size "18px"
-                     :margin-top "8px"
-                     :padding "8px"
-                     :border-top "1px solid black"
-                     :border-bottom "1px solid black"
-                     :height "32px"}
-             :ref ref}]))
+    [:input.flex-auto
+     {:on-key-down (fn [e]
+                     (when (= 13 (o/get e "keyCode"))
+                       (on-new-name (o/get @ref "value"))
+                       (o/set @ref "value" nil)))
+      :placeholder placeholder
+      :style {:position :sticky
+              :top "60px"
+              :font-size "18px"
+              :margin-top "8px"
+              :padding "8px"
+              :border-top "1px solid black"
+              :border-bottom "1px solid black"
+              :height "32px"}
+      :ref ref}]))
 
 (defn list-view
   "Flex based list view"
   [{:keys [data render-item key-fn on-item-click]}]
-  [:ul {:style {:list-style "none"
-                :display :flex
-                :flex-direction :row
-                :flex-wrap :wrap
-                :width "100%"
-                :padding-left "0"}}
+  [:ul.list-none.flex.flew-row.flex-wrap
+   {:style {:width "100%"}}
    (for [item data]
      ^{:key (key-fn item)}
      [render-item  (assoc item :on-item-click on-item-click)])])
 
 (defn name-label [{:keys [on-item-click] :as item}]
-  [:li
-   {:style {:list-style "none"
-            :list-style-type "none"
-            :border "1px solid black"
+  [:li.flex.items-center.content-center.list-none
+   {:style {:border "1px solid black"
             :border-radius "5px"
             :padding "4px 8px"
-            :margin "4px"
-            :display :flex
-            :align-items :center
-            :justify-content :center}}
+            :margin "4px"}}
    [:div {:style {:margin-right "8px"}} (:name item)]
    [:div {:on-click #(on-item-click item)
           :style {:font-size "21px"}} " \u2297"]])
 
 (defn sticky-header [{:keys [right middle left]}]
   [:section {:style {:position :sticky
-                        :background-color :white
-                        :top 0}}
-      [:div {:style {:display :flex
-                     :flex-direction :row
-                     :align-items :center}}
+                     :background-color :white
+                     :top 0}}
+      [:div.flex.flex-row.items-center
        (when left
          left)
        (when middle
@@ -99,19 +88,16 @@
         custom-words-cb #()
         on-finish (uix/callback #(on-setup-finish @players) [players])
         enough-player? (> (count @players) 3)]
-    [:div {:style {:display :flex
-                   :flex-direction :column}}
+    [:div.flex.flex-col
      [sticky-header {:middle  (let [{:keys [spy common]} (logic/init-settings @players)]
-                                [:div {:style {:flex "1 0 auto"}}
+                                [:div.flex-auto
                                   (if enough-player?
                                     (str "玩家: " (count @players)  ", 間諜：" spy ", 平民：" common)
                                     (str "還差" (- 4 (count @players))  "人才可以開始遊戲"))])
                      :right [button {:on-click on-finish
                                      :disabled (not enough-player?)} "開始"]}]
-     [:section {:style {:display :flex
-                        :flex-direction :row
-                        :align-items :center}}
-      [:div {:style {:flex "1 0 auto"}} "暗號"]
+     [:section.flex.flex-row.items-center
+      [:div.flex-auto "暗號"]
       [button {:on-click custom-words-cb} "隨機"]]
      [name-input {:placeholder "輸入玩家名稱"
                   :on-new-name (fn on-new-name [n]
@@ -128,16 +114,13 @@
                  :key-fn :id}]]))
 
 (defn player-code-card [{:keys [on-item-click]} player words]
-  [:li {:style (cond->
-                   {:border "1px solid black"
-                    :width "45%"
-                    :margin " calc( 2.5% - 1px)"
-                    :display :flex
-                    :flex-direction :column
-                    :align-items :center
-                    :justify-content :center}
-                 (:confirmed player)
-                 (assoc :background-color :grey))}
+  [:li.flex.flex-col.items-center.content-center
+   {:style (cond->
+               {:border "1px solid black"
+                :width "45%"
+                :margin " calc( 2.5% - 1px)"}
+             (:confirmed player)
+             (assoc :background-color :grey))}
    [:h4
     {:style {:max-width "150px"
              :text-overflow :ellipsis
@@ -151,10 +134,8 @@
 (defn confirm-scene [{:keys [game on-confirm]}]
   (let [game-state (uix/state game)
         {:keys [players words]} @game-state]
-    [:div
-     {:style {:display :flex
-              :flex-direction :column}}
-     [sticky-header {:middle [:div {:style {:flex "1 0 auto"}}
+    [:div.flex.flex-col
+     [sticky-header {:middle [:div.flex-auto
                               "確認暗號"]
                      :right [button {:on-click on-confirm
                                      :disabled (not (every? :confirmed players))}
@@ -172,16 +153,13 @@
 
 (defn player-vote-card [{:keys [on-item-click player]}]
   (let [clicked (uix/state false)]
-   [:li {:style (cond->
-                    {:border "1px solid black"
-                     :width "45%"
-                     :margin " calc( 2.5% - 1px)"
-                     :display :flex
-                     :flex-direction :column
-                     :align-items :center
-                     :justify-content :center}
-                    (:voted player)
-                    (assoc :background-color :grey))}
+   [:li.flex.flex-col.items-center.content-center
+    {:style (cond->
+                {:border "1px solid black"
+                 :width "45%"
+                 :margin " calc( 2.5% - 1px)"}
+                (:voted player)
+                (assoc :background-color :grey))}
     [:h4
      {:style {:max-width "150px"
               :text-overflow :ellipsis
@@ -197,9 +175,8 @@
 (defn gaming-scene [{:keys [init-state on-game-over]}]
   (let [gaming-state (uix/state init-state)
         dead (uix/state [])]
-    [:div {:style {:display :flex
-                   :flex-direction :column}}
-     [sticky-header {:middle [:div {:style {:flex "1 0 auto"}}
+    [:div.flex.flex-col
+     [sticky-header {:middle [:div.flex-auto
                               (cond
                                 (= (count @dead) 0)
                                 "投票"
