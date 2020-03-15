@@ -25,8 +25,10 @@
   (let [spy (js/Math.round (* (count players) 0.2))]
     {:spy spy :common (- (count players) spy)}))
 
-(defn init-game [players]
-  (let [words (draw-words db)
+(defn init-game [{:keys [words players]}]
+  (let [words (if (some nil? (vals words))
+                (draw-words db)
+                words)
         settings (init-settings players)]
     {:players (mark-characters players settings)
      :words words

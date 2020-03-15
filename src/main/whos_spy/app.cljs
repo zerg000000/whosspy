@@ -2,7 +2,10 @@
   (:require [uix.core.alpha :as uix]
             [uix.dom.alpha :as dom]
             [goog.object :as o]
-            [whos-spy.logic :as logic]))
+            ["react-transition-group/CSSTransition" :as css-transition]
+            [whos-spy.logic :as logic]
+            [whos-spy.translation :as t]
+            [clojure.string :as string]))
 
 (defn mark-for [game-state player marker]
   (update game-state
@@ -14,35 +17,29 @@
                      p))
                  players))))
 
-(defn t [msg]
-   (case msg
-     :spy "臥底"
-     :common "平民"
-     :moron "白板"
-     :gaming-desc "每回合，所有人輪流發言證明自己不是臥底，然後投票處決一人。若所有臥底被處死，平民勝利。若臥底生存到最後一回合，則臥底勝。"))
-
 ;; UI
 
 (defn button [{:keys [on-click disabled]} text]
-  [:button {:on-click on-click
-            :disabled disabled
-            :style {:font-size "18px"
+  [:button.font-bold
+   {:on-click on-click
+    :disabled disabled
+    :style (cond-> {:font-size "18px"
                     :padding "8px"
-                    :margin "8px"
                     :background-color "transparent"
-                    :border "1px solid black"}}
+                    :border "1px solid black"}
+                   disabled
+                   (assoc :background-color :grey))}
    text])
 
 (defn name-input [{:keys [on-new-name placeholder]}]
   (let [ref (uix/ref)]
-    [:input.flex-auto
+    [:input.flex-auto.sticky
      {:on-key-down (fn [e]
                      (when (= 13 (o/get e "keyCode"))
                        (on-new-name (o/get @ref "value"))
                        (o/set @ref "value" nil)))
       :placeholder placeholder
-      :style {:position :sticky
-              :top "60px"
+      :style {:top "53px"
               :font-size "18px"
               :margin-top "8px"
               :padding "8px"
@@ -54,8 +51,7 @@
 (defn list-view
   "Flex based list view"
   [{:keys [data render-item key-fn on-item-click]}]
-  [:ul.list-none.flex.flew-row.flex-wrap
-   {:style {:width "100%"}}
+  [:ul.list-none.flex.flew-row.flex-wrap.w-full.overflow-x-hidden
    (for [item data]
      ^{:key (key-fn item)}
      [render-item  (assoc item :on-item-click on-item-click)])])
@@ -71,23 +67,55 @@
           :style {:font-size "21px"}} " \u2297"]])
 
 (defn sticky-header [{:keys [right middle left]}]
-  [:section {:style {:position :sticky
-                     :background-color :white
-                     :top 0}}
-      [:div.flex.flex-row.items-center
-       (when left
-         left)
-       (when middle
-         middle)
-       (when right
-         right)]])
+  [:section.sticky.p-1
+   {:style {:background-color :white
+            :top 0
+            :z-index 1}}
+   [:div.flex.flex-row.items-center
+    (when left
+      left)
+    (when middle
+      middle)
+    (when right
+      right)]])
+
+(defn custom-word-inputs [{:keys [custom? words on-spy-input on-common-input]}]
+  [:> css-transition {:classNames "alert"
+                      :in custom?
+                      :mountOnEnter true
+                      :timeout 100}
+   [:section.flex.flex-row.items-center.content-center
+    [:div.flex-auto
+     [:label {:for "spyword" :style {:width "3rem"}} "間諜: "]
+     [:input#spyword.outline-none.secret
+      {:style       {:width         "6rem"
+                     :padding-left  "8px"
+                     :border-bottom "1px solid black"}
+       :on-blur     on-spy-input
+       :placeholder (when (string/blank?  (:spy words))
+                      "空白")}]]
+    [:div.flex-auto
+     [:label {:for "commonword" :style {:width "3rem"}} "平民: "]
+     [:input#commonword.outline-none.secret
+      {:style {:width "6rem"
+               :border-bottom "1px solid black"}
+       :on-blur     on-common-input
+       :placeholder (when (string/blank?  (:common words))
+                      "空白")}]]]])
+
+(defn switch [{:keys [value on-toggle]}]
+  [:label.switch
+   [:input {:type :checkbox :default-value value
+            :on-click on-toggle}]
+   [:span.slider]])
 
 (defn setup-scene [{:keys [on-setup-finish init-state]}]
   (let [players (uix/state (:players init-state []))
-        words (uix/state nil)
-        custom-words-cb #()
-        on-finish (uix/callback #(on-setup-finish @players) [players])
-        enough-player? (> (count @players) 3)]
+        words (uix/state {:common nil :spy nil})
+        custom? (uix/state false)
+        on-finish (uix/callback #(on-setup-finish {:players @players :words @words}) [players words])
+        enough-player? (> (count @players) 3)
+        words-okay? (or (not @custom?) (and (:common @words) (:spy @words)))]
     [:div.flex.flex-col
      [sticky-header {:middle  (let [{:keys [spy common]} (logic/init-settings @players)]
                                 [:div.flex-auto
@@ -95,10 +123,18 @@
                                     (str "玩家: " (count @players)  ", 間諜：" spy ", 平民：" common)
                                     (str "還差" (- 4 (count @players))  "人才可以開始遊戲"))])
                      :right [button {:on-click on-finish
-                                     :disabled (not enough-player?)} "開始"]}]
-     [:section.flex.flex-row.items-center
-      [:div.flex-auto "暗號"]
-      [button {:on-click custom-words-cb} "隨機"]]
+                                     :disabled (not (and enough-player?
+                                                         words-okay?))} "開始"]}]
+     [:section.flex.flex-row.items-center.p-1
+      [:div.flex-auto "自定暗號"]
+      [switch {:value @custom?
+               :on-toggle #(swap! custom? not)}]]
+     [custom-word-inputs {:custom? @custom?
+                          :words @words
+                          :on-spy-input (fn [in]
+                                          (swap! words assoc :spy (-> in .-target .-value)))
+                          :on-common-input (fn [in]
+                                             (swap! words assoc :common (-> in .-target .-value)))}]
      [name-input {:placeholder "輸入玩家名稱"
                   :on-new-name (fn on-new-name [n]
                                  (swap! players
@@ -140,7 +176,7 @@
                      :right [button {:on-click on-confirm
                                      :disabled (not (every? :confirmed players))}
                              "開始"]}]
-     [:p "當所有人都確認過自己的勢力暗號就可以開始"]
+     [:p (t/t :confirm-desc)]
      [list-view {:data players
                  :key-fn :id
                  :render-item (fn [player]
@@ -166,11 +202,11 @@
               :overflow-x :hidden}}
      (:name player)]
     (if (:voted player)
-      [button {} (t (:character player))]
+      [button {} (t/t (:character player))]
       [button {:on-click (fn [e]
                            (reset! clicked true)
                            (on-item-click player))}
-       "處決"])]))
+       (t/t :vote)])]))
 
 (defn gaming-scene [{:keys [init-state on-game-over]}]
   (let [gaming-state (uix/state init-state)
@@ -188,9 +224,9 @@
                                 "平民勝利!"
                                 :else
                                 (let [turn (count @dead)]
-                                   (str "第" turn "回合，" (-> @dead last :character t) "被處決")))]
+                                   (str "第" turn "回合，" (-> @dead last :character t/t) "被處決")))]
                      :right  [button {:on-click on-game-over} "結束"]}]
-     [:p (t :gaming-desc)]
+     [:p (t/t :gaming-desc)]
      [list-view {:data (:players @gaming-state)
                  :render-item
                  (fn [item]

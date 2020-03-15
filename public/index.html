@@ -20,10 +20,103 @@
 
           font-size: 18px;
       }
+
+      .secret {
+        background-color: black;
+      }
+
+      .secret:focus {
+        background-color: transparent;
+      }
+
+      .alert-enter, .alert-appear {
+        animation: fadeInLeft ease .2s;
+      }
+
+      .alert-exit, .alert-leave {
+        animation: fadeOutLeft ease .2s;
+      }
+
+      .alert-exit-done {
+        display: none;
+      }
+
+@keyframes fadeInLeft {
+  0% {
+    opacity:0;
+    transform: translateX(-100vw);
+  }
+  100% {
+    opacity:1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeOutLeft {
+  0% {
+    opacity:1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity:0;
+    transform: translateX(-100vw);
+  }
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #000;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #000;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(26px);
+  -ms-transform: translateX(26px);
+  transform: translateX(26px);
+}
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root" class="select-none"></div>
     <script src="js/main.js"></script>
   </body>
 </html>
