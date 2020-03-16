@@ -84,7 +84,7 @@
                       :in custom?
                       :mountOnEnter true
                       :timeout 100}
-   [:section.flex.flex-row.items-center.content-center
+   [:section.flex.flex-row.items-center.content-center.p-1
     [:div.flex-auto
      [:label {:for "spyword" :style {:width "3rem"}} "間諜: "]
      [:input#spyword.outline-none.secret
@@ -98,6 +98,7 @@
      [:label {:for "commonword" :style {:width "3rem"}} "平民: "]
      [:input#commonword.outline-none.secret
       {:style {:width "6rem"
+               :padding-left  "8px"
                :border-bottom "1px solid black"}
        :on-blur     on-common-input
        :placeholder (when (string/blank?  (:common words))
@@ -113,9 +114,13 @@
   (let [players (uix/state (:players init-state []))
         words (uix/state {:common nil :spy nil})
         custom? (uix/state false)
-        on-finish (uix/callback #(on-setup-finish {:players @players :words @words}) [players words])
+        on-finish (uix/callback #(on-setup-finish (cond-> {:players @players}
+                                                          @custom?
+                                                          (assoc :words @words)))
+                    [players words custom?])
         enough-player? (> (count @players) 3)
-        words-okay? (or (not @custom?) (and (:common @words) (:spy @words)))]
+        words-okay? (not (and @custom? (or (string/blank? (:common @words))
+                                           (string/blank? (:spy @words)))))]
     [:div.flex.flex-col
      [sticky-header {:middle  (let [{:keys [spy common]} (logic/init-settings @players)]
                                 [:div.flex-auto
@@ -154,7 +159,8 @@
    {:style (cond->
                {:border "1px solid black"
                 :width "45%"
-                :margin " calc( 2.5% - 1px)"}
+                :margin "calc( 2.5% - 1px)"
+                :padding "16px 0px"}
              (:confirmed player)
              (assoc :background-color :grey))}
    [:h4
@@ -193,7 +199,8 @@
     {:style (cond->
                 {:border "1px solid black"
                  :width "45%"
-                 :margin " calc( 2.5% - 1px)"}
+                 :margin " calc( 2.5% - 1px)"
+                 :padding "16px 0"}
                 (:voted player)
                 (assoc :background-color :grey))}
     [:h4
@@ -235,6 +242,22 @@
                                            (swap! dead conj item))
                                       :player item}])
                  :key-fn :id}]]))
+
+(def game-state
+  {:players [{:character :common
+              :id        1
+              :name      "a"}
+             {:character :common
+              :id        2
+              :name      "b"}
+             {:character :spy
+              :id        3
+              :name      "c"}
+             {:character :common
+              :id        4
+              :name      "d"}]
+   :words {:spy "df" :common "12"}
+   :settings {:spy 1 :common 3}})
 
 (defn app []
   (let [scene (uix/state :setup)

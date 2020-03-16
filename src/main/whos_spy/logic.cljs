@@ -26,7 +26,8 @@
     {:spy spy :common (- (count players) spy)}))
 
 (defn init-game [{:keys [words players]}]
-  (let [words (if (some nil? (vals words))
+  (let [words (if (or (nil? words)
+                      (some nil? (vals words)))
                 (draw-words db)
                 words)
         settings (init-settings players)]
